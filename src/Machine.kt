@@ -8,24 +8,28 @@ class Instruction(val value: Int) {
     val kk = value.and(0x00FF)
 
     fun nibbles(index: Int, length: Int): Int {
-        return 0
+        val mask = 0xFFFF.shr((4 - length) * 4)
+        val rgt = (4 - length - index) * 4
+        return value.shr(rgt).and(mask)
     }
 }
 
 class InstructionHandler(
-    val matches: (Instruction) -> Boolean,
-    val execute: (Machine) -> Unit
+        val matches: (Instruction) -> Boolean,
+        val execute: (Machine) -> Unit
 )
 
-val handlers = listOf(
-    // clear screen
-    InstructionHandler({ it.value == 0x00E0 }) {
-
-    },
-    // return from subroutine
-    InstructionHandler({ it.value == 0x00EE }) {
-
-    }
+private val handlers = listOf(
+        // clear screen
+        InstructionHandler({ it.value == 0x00E0 }) {
+            it.programCounter += 2
+        },
+        // return from subroutine
+        InstructionHandler({ it.value == 0x00EE }) {
+            it.programCounter = it.stack[it.stackPointer]
+            it.stackPointer -= 1
+        }
+        //InstructionHandler({ it.})
 )
 
 class Machine(val rom: InputStream) {
@@ -52,8 +56,8 @@ class Machine(val rom: InputStream) {
 
     private fun fetch(): Instruction {
         val value = memory[programCounter]
-            .shl(8)
-            .or(memory[programCounter + 1])
+                .shl(8)
+                .or(memory[programCounter + 1])
 
         return Instruction(value)
     }
