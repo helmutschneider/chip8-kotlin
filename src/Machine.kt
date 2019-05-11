@@ -16,20 +16,23 @@ class Instruction(val value: Int) {
 
 class InstructionHandler(
         val matches: (Instruction) -> Boolean,
-        val execute: (Machine) -> Unit
+        val execute: (Machine, Instruction) -> Unit
 )
 
 private val handlers = listOf(
-        // clear screen
-        InstructionHandler({ it.value == 0x00E0 }) {
-            it.programCounter += 2
+        // CLS: clear screen
+        InstructionHandler({ it.value == 0x00E0 }) { m, _ ->
+            m.programCounter += 2
         },
-        // return from subroutine
-        InstructionHandler({ it.value == 0x00EE }) {
-            it.programCounter = it.stack[it.stackPointer]
-            it.stackPointer -= 1
+        // RET: return from subroutine
+        InstructionHandler({ it.value == 0x00EE }) { m, _ ->
+            m.programCounter = m.stack[m.stackPointer]
+            m.stackPointer -= 1
+        },
+        // SYS address: jump to routine at address
+        InstructionHandler({ it.value.and(0x0FFF) == it.value }) { m, i ->
+            m.programCounter = i.nnn
         }
-        //InstructionHandler({ it.})
 )
 
 class Machine(val rom: InputStream) {
@@ -71,6 +74,6 @@ class Machine(val rom: InputStream) {
             throw Exception("No matching handler for instruction $hex")
         }
 
-        handler.execute(this)
+        handler.execute(this, instr)
     }
 }
