@@ -40,17 +40,17 @@ class Machine(val rom: InputStream) {
         val instr = fetch()
 
         when (instr.value) {
+            // CLEAR SCREEN
             0x00E0 -> {
-                // CLEAR SCREEN
                 programCounter += 2
             }
+            // RETURN
             0x00EE -> {
-                // RETURN
                 stackPointer -= 1
                 programCounter = stack[stackPointer]
             }
+            // SYS ADDRESS
             0x0FFF.and(instr.value) -> {
-                // SYS ADDRESS
                 // do nothing.
             }
             else -> {
