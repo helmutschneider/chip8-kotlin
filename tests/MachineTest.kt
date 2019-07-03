@@ -2,6 +2,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import java.io.ByteArrayInputStream
+import java.util.Arrays
 
 class MachineTest {
     val rom: ByteArray = ByteArray(128)
@@ -9,9 +10,7 @@ class MachineTest {
 
     @BeforeEach
     fun setUp() {
-        for (i in rom.indices) {
-            rom[i] = 0x00
-        }
+        Arrays.fill(rom, 0x00)
         machine = Machine(ByteArrayInputStream(rom))
         machine.onCycle = { m, _ ->
             m.run = false
@@ -44,5 +43,18 @@ class MachineTest {
         assertThrows(Exception::class.java) {
             machine.boot()
         }
+    }
+
+    @Test
+    fun shouldReturnFromSubroutine() {
+        setInstructions(listOf(0x00EE))
+
+        machine.stackPointer += 1
+        machine.stack[0] = 1000
+
+        machine.boot()
+
+        assertEquals(0x00EE, machine.previousInstruction?.value)
+        assertEquals(1000, machine.programCounter)
     }
 }
