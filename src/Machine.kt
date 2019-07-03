@@ -39,19 +39,84 @@ class Machine(val rom: InputStream) {
     private fun cycle() {
         val instr = fetch()
 
+        programCounter += 2
+
         when (instr.value) {
-            // CLEAR SCREEN
+            // Clear the display.
             0x00E0 -> {
-                programCounter += 2
             }
-            // RETURN
+            // Return from a subroutine.
             0x00EE -> {
                 stackPointer -= 1
                 programCounter = stack[stackPointer]
             }
-            // SYS ADDRESS
+            // Jump to a machine code routine at nnn.
             0x0FFF.and(instr.value) -> {
                 // do nothing.
+            }
+            // Jump to location nnn.
+            0x1FFF.and(instr.value) -> {
+                programCounter = instr.nnn
+            }
+            // Call subroutine at nnn.
+            0x2FFF.and(instr.value) -> {
+                stack[stackPointer] = programCounter
+                stackPointer += 1
+                programCounter = instr.nnn
+            }
+            // Skip next instruction if Vx = kk.
+            0x3FFF.and(instr.value) -> {
+                if (V[instr.x] == instr.kk) {
+                    programCounter += 2
+                }
+            }
+            // Skip next instruction if Vx != kk.
+            0x4FFF.and(instr.value) -> {
+                if (V[instr.x] != instr.kk) {
+                    programCounter += 2
+                }
+            }
+            // Skip next instruction if Vx = Vy.
+            0x5FF0.and(instr.value) -> {
+                if (V[instr.x] == V[instr.y]) {
+                    programCounter += 2
+                }
+            }
+            // Set Vx = kk.
+            0x6FFF.and(instr.value) -> {
+                V[instr.x] = instr.kk
+            }
+            // Set Vx = Vx + kk.
+            0x7FFF.and(instr.value) -> {
+                V[instr.x] += instr.kk
+            }
+            // Set Vx = Vy.
+            0x8FF0.and(instr.value) -> {
+                V[instr.x] = V[instr.y]
+            }
+            // Set Vx = Vx OR Vy.
+            0x8FF1.and(instr.value) -> {
+                V[instr.x] = V[instr.x].or(V[instr.y])
+            }
+            // Set Vx = Vx AND Vy.
+            0x8FF2.and(instr.value) -> {
+                V[instr.x] = V[instr.x].and(V[instr.y])
+            }
+            // Set Vx = Vx XOR Vy.
+            0x8FF3.and(instr.value) -> {
+                V[instr.x] = V[instr.x].xor(V[instr.y])
+            }
+            // Set Vx = Vx + Vy, set VF = carry.
+            0x8FF4.and(instr.value) -> {
+                val result = V[instr.x] + V[instr.y]
+                V[15] = if (result > 255) 1 else 0
+                V[instr.x] = result.and(0xFF)
+            }
+            // Set Vx = Vx - Vy, set VF = NOT borrow.
+            0x8FF5.and(instr.value) -> {
+                val result = V[instr.x] - V[instr.y]
+                V[15] = if (result > 0) 1 else 0
+                V[instr.x] = result.and(0xFF)
             }
             else -> {
                 throw Exception("Unknown instruction \"%s\"".format(Integer.toHexString(instr.value)))
