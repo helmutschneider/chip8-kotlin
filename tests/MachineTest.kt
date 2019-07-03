@@ -268,4 +268,119 @@ class MachineTest {
         assertEquals(253, machine.V[1])
         assertEquals(0, machine.V[15])
     }
+
+    @Test
+    fun shouldShiftVxRightAndSetCarry() {
+        setInstructions(listOf(0x81F6))
+
+        machine.V[1] = 0b11110001
+
+        machine.boot()
+
+        assertEquals(0b01111000, machine.V[1])
+        assertEquals(1, machine.V[15])
+    }
+
+    @Test
+    fun shouldShiftVxRightAndNotSetCarry() {
+        setInstructions(listOf(0x81F6))
+
+        machine.V[1] = 0b11110000
+
+        machine.boot()
+
+        assertEquals(0b01111000, machine.V[1])
+        assertEquals(0, machine.V[15])
+    }
+
+    @Test
+    fun shouldSubtractVxFromVyAndSetCarry() {
+        setInstructions(listOf(0x8147))
+
+        machine.V[1] = 6
+        machine.V[4] = 9
+
+        machine.boot()
+
+        assertEquals(3, machine.V[1])
+        assertEquals(1, machine.V[15])
+    }
+
+    @Test
+    fun shouldSubtractVxFromVyAndNotSetCarry() {
+        setInstructions(listOf(0x8147))
+
+        machine.V[1] = 10
+        machine.V[4] = 9
+
+        machine.boot()
+
+        assertEquals(255, machine.V[1])
+        assertEquals(0, machine.V[15])
+    }
+
+    @Test
+    fun shouldShiftVxLeftAndSetCarry() {
+        setInstructions(listOf(0x810E))
+
+        machine.V[1] = 0x81
+
+        machine.boot()
+
+        assertEquals(2, machine.V[1])
+        assertEquals(1, machine.V[15])
+    }
+
+    @Test
+    fun shouldShiftVxLeftAndNotCarry() {
+        setInstructions(listOf(0x810E))
+
+        machine.V[1] = 0x01
+
+        machine.boot()
+
+        assertEquals(2, machine.V[1])
+        assertEquals(0, machine.V[15])
+    }
+
+    @Test
+    fun shouldSkipInstructionWhenVxNotEqualsVy() {
+        setInstructions(listOf(0x9120))
+
+        machine.V[1] = 2
+        machine.V[2] = 3
+
+        machine.boot()
+
+        assertEquals(516, machine.programCounter)
+    }
+
+    @Test
+    fun shouldSetIToNnn() {
+        setInstructions(listOf(0xA123))
+
+        machine.boot()
+
+        assertEquals(0x0123, machine.I)
+    }
+
+    @Test
+    fun shouldJumpToNnnPlusV0() {
+        setInstructions(listOf(0xB0FF))
+
+        machine.V[0] = 10
+
+        machine.boot()
+
+        assertEquals(265, machine.programCounter)
+    }
+
+    @Test
+    fun shouldRandomizeNumberAndBitwiseAndWithKk() {
+        setInstructions(listOf(0xC10F))
+
+        machine.boot()
+
+        assertTrue(machine.V[1] in (0..15))
+    }
 }

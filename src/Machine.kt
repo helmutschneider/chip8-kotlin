@@ -1,5 +1,6 @@
 import java.io.InputStream
 import java.lang.Exception
+import kotlin.random.Random
 
 class Machine(val rom: InputStream) {
     var run = true
@@ -117,6 +118,43 @@ class Machine(val rom: InputStream) {
                 val result = V[instr.x] - V[instr.y]
                 V[15] = if (result > 0) 1 else 0
                 V[instr.x] = result.and(0xFF)
+            }
+            // Set Vx = Vx SHR 1.
+            0x8FF6.and(instr.value) -> {
+                V[15] = V[instr.x].and(0x01)
+                V[instr.x] = V[instr.x].shr(1)
+            }
+            // Set Vx = Vy - Vx, set VF = NOT borrow.
+            0x8FF7.and(instr.value) -> {
+                val result = V[instr.y] - V[instr.x]
+                V[15] = if (result > 0) 1 else 0
+                V[instr.x] = result.and(0xFF)
+            }
+            // Set Vx = Vx SHL 1.
+            0x8FFE.and(instr.value) -> {
+                V[15] = V[instr.x].shr(7)
+                V[instr.x] = V[instr.x].shl(1).and(0xFF)
+            }
+            // Skip next instruction if Vx != Vy.
+            0x9FF0.and(instr.value) -> {
+                if (V[instr.x] != V[instr.y]) {
+                    programCounter += 2
+                }
+            }
+            // Set I = nnn.
+            0xAFFF.and(instr.value) -> {
+                I = instr.nnn
+            }
+            // Jump to location nnn + V0.
+            0xBFFF.and(instr.value) -> {
+                programCounter = instr.nnn + V[0]
+            }
+            // Set Vx = random byte AND kk.
+            0xCFFF.and(instr.value) -> {
+                V[instr.x] = Random.nextBits(8).and(0xFF).and(instr.kk)
+            }
+            // Display n-byte sprite starting at memory location I at (Vx, Vy), set VF = collision.
+            0xDFFF.and(instr.value) -> {
             }
             else -> {
                 throw Exception("Unknown instruction \"%s\"".format(Integer.toHexString(instr.value)))
