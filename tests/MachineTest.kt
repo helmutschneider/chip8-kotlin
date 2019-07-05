@@ -1,23 +1,31 @@
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.Arguments
+import org.junit.jupiter.params.provider.MethodSource
 import java.io.ByteArrayInputStream
 import java.util.Arrays
 
 class MachineTest {
     val rom: ByteArray = ByteArray(128)
-    var machine: Machine = Machine(ByteArrayInputStream(rom))
+    val pressedKeys = mutableSetOf<Int>()
+    val io = object: InputOutput {
+        override fun getPressedKeys() = pressedKeys
+    }
+    var machine: Machine = Machine(ByteArrayInputStream(rom), io)
 
     @BeforeEach
     fun setUp() {
         Arrays.fill(rom, 0x00)
-        machine = Machine(ByteArrayInputStream(rom))
+        machine = Machine(ByteArrayInputStream(rom), io)
         machine.onCycle = { m, _ ->
             m.run = false
         }
+        pressedKeys.clear()
     }
 
-    private fun setInstructions(instructions: List<Int>): Unit {
+    private fun setInstructions(vararg instructions: Int): Unit {
         for (index in instructions.indices) {
             val instr = instructions[index]
             val k = index * 2
@@ -28,7 +36,7 @@ class MachineTest {
 
     @Test
     fun shouldHandleClearScreenInstruction() {
-        setInstructions(listOf(0x00E0))
+        setInstructions(0x00E0)
 
         machine.boot()
 
@@ -37,17 +45,8 @@ class MachineTest {
     }
 
     @Test
-    fun shouldThrowOnUnknownInstruction() {
-        setInstructions(listOf(0xF065))
-
-        assertThrows(Exception::class.java) {
-            machine.boot()
-        }
-    }
-
-    @Test
     fun shouldReturnFromSubroutine() {
-        setInstructions(listOf(0x00EE))
+        setInstructions(0x00EE)
 
         machine.stackPointer += 1
         machine.stack[0] = 1000
@@ -60,7 +59,7 @@ class MachineTest {
 
     @Test
     fun shouldDoNothingOnSysAddress() {
-        setInstructions(listOf(0x0123))
+        setInstructions(0x0123)
 
         machine.boot()
 
@@ -70,7 +69,7 @@ class MachineTest {
 
     @Test
     fun shouldJumpToAddress() {
-        setInstructions(listOf(0x13FF))
+        setInstructions(0x13FF)
 
         machine.boot()
 
@@ -79,7 +78,7 @@ class MachineTest {
 
     @Test
     fun shouldCallAddress() {
-        setInstructions(listOf(0x23FF))
+        setInstructions(0x23FF)
 
         machine.boot()
 
@@ -88,71 +87,33 @@ class MachineTest {
         assertEquals(0x03FF, machine.programCounter)
     }
 
-    @Test
-    fun shouldSkipInstructionIfVxEqualsKk() {
-        setInstructions(listOf(0x31F0))
-        machine.V[1] = 240
+    @ParameterizedTest
+    @MethodSource("skipsInstructionWhenVxEqualsKkProvider")
+    fun shouldSkipInstructionWhenVxEqualsKk(instruction: Int, vValue: Int, expectedProgramCounter: Int) {
+        setInstructions(instruction.or(1.shl(8)))
+
+        machine.V[1] = vValue
         machine.boot()
 
-        assertEquals(516, machine.programCounter)
+        assertEquals(expectedProgramCounter, machine.programCounter)
     }
 
-    @Test
-    fun shouldNotSkipInstructionIfVxNotEqualsKk() {
-        setInstructions(listOf(0x31F0))
-        machine.V[1] = 239
-        machine.boot()
+    @ParameterizedTest
+    @MethodSource("skipsInstructionWhenRegistersEqualProvider")
+    fun shouldSkipInstructionWhenRegistersEqual(instruction: Int, a: Int, b: Int, expectedProgramCounter: Int) {
+        setInstructions(instruction.or(0x0250))
 
-        assertEquals(514, machine.programCounter)
-    }
-
-    @Test
-    fun shouldSkipInstructionIfVxNotEqualsKk() {
-        setInstructions(listOf(0x41F0))
-
-        machine.V[1] = 239
-        machine.boot()
-
-        assertEquals(516, machine.programCounter)
-    }
-
-    @Test
-    fun shouldNotSkipInstructionIfVxEqualsKk() {
-        setInstructions(listOf(0x41F0))
-
-        machine.V[1] = 240
-        machine.boot()
-
-        assertEquals(514, machine.programCounter)
-    }
-
-    @Test
-    fun shouldSkipInstructionIfVxEqualsVy() {
-        setInstructions(listOf(0x5250))
-
-        machine.V[2] = 50
-        machine.V[5] = 50
+        machine.V[2] = a
+        machine.V[5] = b
 
         machine.boot()
 
-        assertEquals(516, machine.programCounter)
-    }
-
-    @Test
-    fun shouldNotSkipInstructionIfVxNotEqualsVy() {
-        setInstructions(listOf(0x5250))
-
-        machine.V[2] = 50
-        machine.V[5] = 49
-
-        machine.boot()
-
-        assertEquals(514, machine.programCounter)
+        assertEquals(expectedProgramCounter, machine.programCounter)
     }
 
     @Test
     fun shouldSetVxToKk() {
-        setInstructions(listOf(0x61F1))
+        setInstructions(0x61F1)
 
         machine.boot()
 
@@ -161,7 +122,7 @@ class MachineTest {
 
     @Test
     fun shouldAddKkToVx() {
-        setInstructions(listOf(0x71F1))
+        setInstructions(0x71F1)
 
         machine.V[1] = 50
 
@@ -170,194 +131,22 @@ class MachineTest {
         assertEquals(291, machine.V[1])
     }
 
-    @Test
-    fun shouldSetVxToVy() {
-        setInstructions(listOf(0x8140))
-
-        machine.V[4] = 123
-
-        machine.boot()
-
-        assertEquals(123, machine.V[1])
-    }
-
-    @Test
-    fun shouldSetVxToVxBitwiseOrVy() {
-        setInstructions(listOf(0x8141))
-
-        machine.V[1] = 0xF0
-        machine.V[4] = 0x0F
+    @ParameterizedTest
+    @MethodSource("mathProvider")
+    fun shouldDoMathToVx(instruction: Int, vxValue: Int, vyValue: Int, expectedCarry: Int, expectedResult: Int) {
+        setInstructions(instruction)
+        machine.V[2] = vxValue
+        machine.V[5] = vyValue
 
         machine.boot()
 
-        assertEquals(0xFF, machine.V[1])
-    }
-
-    @Test
-    fun shouldSetVxToVxBitwiseAndVy() {
-        setInstructions(listOf(0x8142))
-
-        machine.V[1] = 0b01011111
-        machine.V[4] = 0b00111111
-
-        machine.boot()
-
-        assertEquals(0b00011111, machine.V[1])
-    }
-
-    @Test
-    fun shouldSetVxToVxBitwiseXorVy() {
-        setInstructions(listOf(0x8143))
-
-        machine.V[1] = 0xEF
-        machine.V[4] = 0xFF
-
-        machine.boot()
-
-        assertEquals(0x10, machine.V[1])
-    }
-
-    @Test
-    fun shouldAddVxToVyAndNotSetCarry() {
-        setInstructions(listOf(0x8144))
-
-        machine.V[1] = 1
-        machine.V[4] = 3
-
-        machine.boot()
-
-        assertEquals(4, machine.V[1])
-        assertEquals(0, machine.V[15])
-    }
-
-    @Test
-    fun shouldAddVxToVyAndSetCarry() {
-        setInstructions(listOf(0x8144))
-
-        machine.V[1] = 254
-        machine.V[4] = 512
-
-        machine.boot()
-
-        assertEquals(254, machine.V[1])
-        assertEquals(1, machine.V[15])
-    }
-
-    @Test
-    fun shouldSubtractVyFromVxAndSetCarry() {
-        setInstructions(listOf(0x8145))
-
-        machine.V[1] = 5
-        machine.V[4] = 3
-
-        machine.boot()
-
-        assertEquals(2, machine.V[1])
-        assertEquals(1, machine.V[15])
-    }
-
-    @Test
-    fun shouldSubtractVyFromVxAndNotSetCarry() {
-        setInstructions(listOf(0x8145))
-
-        machine.V[1] = 4
-        machine.V[4] = 7
-
-        machine.boot()
-
-        assertEquals(253, machine.V[1])
-        assertEquals(0, machine.V[15])
-    }
-
-    @Test
-    fun shouldShiftVxRightAndSetCarry() {
-        setInstructions(listOf(0x81F6))
-
-        machine.V[1] = 0b11110001
-
-        machine.boot()
-
-        assertEquals(0b01111000, machine.V[1])
-        assertEquals(1, machine.V[15])
-    }
-
-    @Test
-    fun shouldShiftVxRightAndNotSetCarry() {
-        setInstructions(listOf(0x81F6))
-
-        machine.V[1] = 0b11110000
-
-        machine.boot()
-
-        assertEquals(0b01111000, machine.V[1])
-        assertEquals(0, machine.V[15])
-    }
-
-    @Test
-    fun shouldSubtractVxFromVyAndSetCarry() {
-        setInstructions(listOf(0x8147))
-
-        machine.V[1] = 6
-        machine.V[4] = 9
-
-        machine.boot()
-
-        assertEquals(3, machine.V[1])
-        assertEquals(1, machine.V[15])
-    }
-
-    @Test
-    fun shouldSubtractVxFromVyAndNotSetCarry() {
-        setInstructions(listOf(0x8147))
-
-        machine.V[1] = 10
-        machine.V[4] = 9
-
-        machine.boot()
-
-        assertEquals(255, machine.V[1])
-        assertEquals(0, machine.V[15])
-    }
-
-    @Test
-    fun shouldShiftVxLeftAndSetCarry() {
-        setInstructions(listOf(0x810E))
-
-        machine.V[1] = 0x81
-
-        machine.boot()
-
-        assertEquals(2, machine.V[1])
-        assertEquals(1, machine.V[15])
-    }
-
-    @Test
-    fun shouldShiftVxLeftAndNotCarry() {
-        setInstructions(listOf(0x810E))
-
-        machine.V[1] = 0x01
-
-        machine.boot()
-
-        assertEquals(2, machine.V[1])
-        assertEquals(0, machine.V[15])
-    }
-
-    @Test
-    fun shouldSkipInstructionWhenVxNotEqualsVy() {
-        setInstructions(listOf(0x9120))
-
-        machine.V[1] = 2
-        machine.V[2] = 3
-
-        machine.boot()
-
-        assertEquals(516, machine.programCounter)
+        assertEquals(expectedResult, machine.V[2])
+        assertEquals(expectedCarry, machine.V[15])
     }
 
     @Test
     fun shouldSetIToNnn() {
-        setInstructions(listOf(0xA123))
+        setInstructions(0xA123)
 
         machine.boot()
 
@@ -366,7 +155,7 @@ class MachineTest {
 
     @Test
     fun shouldJumpToNnnPlusV0() {
-        setInstructions(listOf(0xB0FF))
+        setInstructions(0xB0FF)
 
         machine.V[0] = 10
 
@@ -375,12 +164,98 @@ class MachineTest {
         assertEquals(265, machine.programCounter)
     }
 
-    @Test
-    fun shouldRandomizeNumberAndBitwiseAndWithKk() {
-        setInstructions(listOf(0xC10F))
+    @ParameterizedTest
+    @MethodSource("randomizeSource")
+    fun shouldRandomizeNumberAndBitwiseAndWithKk(x: Int, kk: Int) {
+        val instr = (0xC000)
+            .or(x.shl(8))
+            .or(kk)
+
+        setInstructions(instr)
+        machine.boot()
+        assertTrue(machine.V[x] in (0..kk))
+    }
+
+    @ParameterizedTest
+    @MethodSource("skipsNextInstructionIfPressedProvider")
+    fun shouldSkipNextInstructionIfKeyWithVxIsPressed(instruction: Int, vValue: Int, pressedKey: Int, expectedProgramCounter: Int) {
+        setInstructions(
+            instruction.or((0x02).shl(8))
+        )
+
+        machine.V[2] = vValue
+        pressedKeys.add(pressedKey)
 
         machine.boot()
 
-        assertTrue(machine.V[1] in (0..15))
+        assertEquals(expectedProgramCounter, machine.programCounter)
+    }
+
+    companion object {
+        @JvmStatic
+        fun skipsInstructionWhenVxEqualsKkProvider(): List<Arguments> {
+            return listOf(
+                // skip on equal
+                Arguments.of(0x30F0, 0xF0, 516),
+                Arguments.of(0x30F0, 0xF1, 514),
+
+                // skip on not equal
+                Arguments.of(0x41F0, 0xF0, 514),
+                Arguments.of(0x41F0, 0xF1, 516)
+            )
+        }
+
+        @JvmStatic
+        fun skipsInstructionWhenRegistersEqualProvider(): List<Arguments> {
+            return listOf(
+                Arguments.of(0x5000, 1, 2, 514),
+                Arguments.of(0x5000, 3, 3, 516),
+                Arguments.of(0x9000, 3, 3, 514),
+                Arguments.of(0x9000, 1, 2, 516)
+            )
+        }
+
+        @JvmStatic
+        fun mathProvider(): List<Arguments> {
+            return listOf(
+                Arguments.of(0x8250, 0, 5, 0, 5),
+                Arguments.of(0x8251, 0x0101, 0x1010, 0, 0x1111),
+                Arguments.of(0x8252, 0x3034, 0xFFF0, 0, 0x3030),
+                Arguments.of(0x8253, 0xEF, 0xFF, 0, 0x10),
+                Arguments.of(0x8254, 1, 3, 0, 4),
+                Arguments.of(0x8254, 254, 512, 1, 254),
+                Arguments.of(0x8255, 5, 3, 1, 2),
+                Arguments.of(0x8255, 5, 6, 0, 255),
+                Arguments.of(0x8206, 0b11110001, 0, 1, 0b01111000),
+                Arguments.of(0x8206, 0b11110000, 0, 0, 0b01111000),
+                Arguments.of(0x8257, 3, 9, 1, 6),
+                Arguments.of(0x8257, 10, 9, 0, 255),
+                Arguments.of(0x820E, 0x81, 0, 1, 2),
+                Arguments.of(0x820E, 0x01, 0, 0, 2)
+            )
+        }
+
+        @JvmStatic
+        fun randomizeSource(): List<Arguments> {
+            val registers = 0..15
+            val low = registers.map { Arguments.of(it, 0) }
+            val mid = registers.map { Arguments.of(it, 15) }
+            val high = registers.map { Arguments.of(it, 255) }
+
+            return low + mid + high
+        }
+
+        @JvmStatic
+        fun skipsNextInstructionIfPressedProvider(): List<Arguments> {
+            return listOf(
+                // skip if pressed
+                Arguments.of(0xE09E, 0x0A, 0x0A, 516),
+                Arguments.of(0xE09E, 0x0A, 0x0B, 514),
+
+                // skip if not pressed
+                Arguments.of(0xE0A1, 0x0A, 0x0A, 514),
+                Arguments.of(0xE0A1, 0x0A, 0x0B, 516)
+            )
+        }
     }
 }

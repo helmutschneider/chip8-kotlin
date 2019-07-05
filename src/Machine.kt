@@ -2,7 +2,7 @@ import java.io.InputStream
 import java.lang.Exception
 import kotlin.random.Random
 
-class Machine(val rom: InputStream) {
+class Machine(val rom: InputStream, val io: InputOutput) {
     var run = true
     val memory = IntArray(4096)
     val V = IntArray(16)
@@ -155,6 +155,68 @@ class Machine(val rom: InputStream) {
             }
             // Display n-byte sprite starting at memory location I at (Vx, Vy), set VF = collision.
             0xDFFF.and(instr.value) -> {
+            }
+            // Skip next instruction if key with the value of Vx is pressed.
+            0xEF9E.and(instr.value) -> {
+                val key = V[instr.x]
+
+                if (io.getPressedKeys().contains(key)) {
+                    programCounter += 2
+                }
+            }
+            // Skip next instruction if key with the value of Vx is not pressed.
+            0xEFA1.and(instr.value) -> {
+                val key = V[instr.x]
+
+                if (!io.getPressedKeys().contains(key)) {
+                    programCounter += 2
+                }
+            }
+            // Set Vx = delay timer value.
+            0xFF07.and(instr.value) -> {
+                V[instr.x] = delayTimer
+            }
+            // Wait for a key press, store the value of the key in Vx.
+            0xFF0A.and(instr.value) -> {
+                val keys = io.getPressedKeys()
+
+                if (keys.isEmpty()) {
+                    // if no key is pressed we need to execute
+                    // this instruction again.
+                    programCounter -= 2
+                } else {
+                    V[instr.x] = keys.first()
+                }
+            }
+            // Set delay timer = Vx.
+            0xFF15.and(instr.value) -> {
+                delayTimer = V[instr.x]
+            }
+            // Set sound timer = Vx.
+            0xFF18.and(instr.value) -> {
+                soundTimer = V[instr.x]
+            }
+            // Set I = I + Vx.
+            0xFF1E.and(instr.value) -> {
+                I += V[instr.x]
+            }
+            // Set I = location of sprite for digit Vx.
+            0xFF29.and(instr.value) -> {
+            }
+            // Store BCD representation of Vx in memory locations I, I+1, and I+2.
+            0xFF33.and(instr.value) -> {
+            }
+            // Store registers V0 through Vx in memory starting at location I.
+            0xFF55.and(instr.value) -> {
+                for (idx in 0..instr.x) {
+                    memory[I + idx] = V[idx]
+                }
+            }
+            // Read registers V0 through Vx from memory starting at location I.
+            0xFF65.and(instr.value) -> {
+                for (idx in 0..instr.x) {
+                    V[idx] = memory[I + idx]
+                }
             }
             else -> {
                 throw Exception("Unknown instruction \"%s\"".format(Integer.toHexString(instr.value)))
