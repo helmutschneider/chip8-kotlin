@@ -205,6 +205,11 @@ class Machine(val rom: InputStream, val io: InputOutput) {
             }
             // Store BCD representation of Vx in memory locations I, I+1, and I+2.
             0xFF33.and(instr.value) -> {
+                val str = V[instr.x].toString().padStart(3, '0')
+
+                for (i in str.indices) {
+                    memory[I + i] = Integer.parseInt(str[i].toString())
+                }
             }
             // Store registers V0 through Vx in memory starting at location I.
             0xFF55.and(instr.value) -> {
