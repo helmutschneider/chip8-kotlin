@@ -12,6 +12,8 @@ class MachineTest {
     val pressedKeys = mutableSetOf<Int>()
     val io = object: InputOutput {
         override fun getPressedKeys() = pressedKeys
+        override fun draw(buffer: DisplayBuffer) {
+        }
     }
     var machine: Machine = Machine(ByteArrayInputStream(rom), io)
 
@@ -289,6 +291,45 @@ class MachineTest {
         assertEquals(3, machine.V[0])
         assertEquals(4, machine.V[1])
         assertEquals(2, machine.V[2])
+    }
+
+    @Test
+    fun shouldDrawSpriteFromMemory() {
+        setInstructions(0xD012)
+
+        machine.V[0] = 2
+        machine.V[1] = 4
+        machine.I = 400
+        machine.memory[400] = 0b01010101
+        machine.memory[401] = 0b10101010
+
+        machine.boot()
+
+        for (i in 2..8) {
+            assertEquals(i % 2 != 0, machine.displayBuffer.pixels[i][4])
+        }
+
+        for (i in 2..8) {
+            assertEquals(i % 2 == 0, machine.displayBuffer.pixels[i][5])
+        }
+
+        assertEquals(0, machine.V[15])
+    }
+
+    @Test
+    fun shouldSetCollisionFlagWhenPixelIsUnset() {
+        setInstructions(0xD012)
+
+        machine.V[0] = 2
+        machine.V[1] = 4
+        machine.I = 400
+        machine.memory[400] = 0x80
+        machine.displayBuffer.pixels[2][4] = true
+
+        machine.boot()
+
+        assertEquals(false, machine.displayBuffer.pixels[2][4])
+        assertEquals(1, machine.V[15])
     }
 
     companion object {

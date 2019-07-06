@@ -2,6 +2,25 @@ import java.io.InputStream
 import java.lang.Exception
 import kotlin.random.Random
 
+private val CHARACTER_SET = intArrayOf(
+    0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
+    0x20, 0x60, 0x20, 0x20, 0x70, // 1
+    0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
+    0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
+    0x90, 0x90, 0xF0, 0x10, 0x10, // 4
+    0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
+    0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
+    0xF0, 0x10, 0x20, 0x40, 0x40, // 7
+    0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
+    0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
+    0xF0, 0x90, 0xF0, 0x90, 0x90, // A
+    0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
+    0xF0, 0x80, 0x80, 0x80, 0xF0, // C
+    0xE0, 0x90, 0x90, 0x90, 0xE0, // D
+    0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
+    0xF0, 0x80, 0xF0, 0x80, 0x80  // F
+)
+
 class Machine(val rom: InputStream, val io: InputOutput) {
     var run = true
     val memory = IntArray(4096)
@@ -13,8 +32,13 @@ class Machine(val rom: InputStream, val io: InputOutput) {
     var programCounter = 0
     var stackPointer = 0
     var onCycle: ((Machine, Instruction) -> Unit)? = null
+    var displayBuffer = DisplayBuffer()
 
     fun boot() {
+        for (i in CHARACTER_SET.indices) {
+            memory[i] = CHARACTER_SET[i]
+        }
+
         val bytes = rom.readAllBytes()
 
         for (i in bytes.indices) {
@@ -22,8 +46,24 @@ class Machine(val rom: InputStream, val io: InputOutput) {
         }
 
         programCounter = 512
+        var prev = System.nanoTime()
+        val tick = 1e9/60
 
         while (run) {
+            val t = System.nanoTime()
+            if (t - prev >= tick) {
+                prev = t
+
+                if (delayTimer > 0) {
+                    delayTimer -= 1
+                }
+                if (soundTimer > 0) {
+                    soundTimer -= 1
+                }
+
+                io.draw(displayBuffer)
+            }
+
             cycle()
         }
     }
@@ -44,6 +84,7 @@ class Machine(val rom: InputStream, val io: InputOutput) {
         when (instr.value) {
             // Clear the display.
             0x00E0 -> {
+                displayBuffer = DisplayBuffer()
             }
             // Return from a subroutine.
             0x00EE -> {
@@ -154,6 +195,24 @@ class Machine(val rom: InputStream, val io: InputOutput) {
             }
             // Display n-byte sprite starting at memory location I at (Vx, Vy), set VF = collision.
             0xDFFF.and(instr.value) -> {
+                val bytes = memory.slice(I until (I + instr.n))
+                val xOrigin = V[instr.x]
+                val yOrigin = V[instr.y]
+                var didErase = false
+
+                for (idx in bytes.indices) {
+                    for (bit in 7 downTo 0) {
+                        val x = (xOrigin + 7 - bit).rem(64)
+                        val y = (yOrigin + idx).rem(32)
+                        val current = displayBuffer.pixels[x][y]
+                        val next = (bytes[idx].shr(bit).and(0x01) > 0).xor(current)
+                        didErase = didErase || (current && !next)
+
+                        displayBuffer.pixels[x][y] = next
+                    }
+                }
+
+                V[15] = if (didErase) 1 else 0
             }
             // Skip next instruction if key with the value of Vx is pressed.
             0xEF9E.and(instr.value) -> {
@@ -201,6 +260,7 @@ class Machine(val rom: InputStream, val io: InputOutput) {
             }
             // Set I = location of sprite for digit Vx.
             0xFF29.and(instr.value) -> {
+                I = V[instr.x] * 5
             }
             // Store BCD representation of Vx in memory locations I, I+1, and I+2.
             0xFF33.and(instr.value) -> {
