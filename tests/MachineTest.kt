@@ -191,6 +191,108 @@ class MachineTest {
         assertEquals(expectedProgramCounter, machine.programCounter)
     }
 
+    @Test
+    fun shouldSetVxToDelayTimer() {
+        setInstructions(0xF107)
+
+        machine.delayTimer = 3
+
+        machine.boot()
+
+        assertEquals(3, machine.V[1])
+    }
+
+    @ParameterizedTest
+    @MethodSource("waitForKeyPressProvider")
+    fun shouldWaitForKeyPress(pressedKey: Int?, expectedProgramCounter: Int) {
+        setInstructions(0xF10A)
+        pressedKey?.let { pressedKeys.add(it) }
+        machine.boot()
+
+        assertEquals(expectedProgramCounter, machine.programCounter)
+        assertEquals(pressedKey ?: 0, machine.V[1])
+    }
+
+    @Test
+    fun shouldSetDelayTimerToVx() {
+        setInstructions(0xF115)
+
+        machine.V[1] = 123
+
+        machine.boot()
+
+        assertEquals(123, machine.delayTimer)
+    }
+
+    @Test
+    fun shouldSetSoundTimerToVx() {
+        setInstructions(0xF118)
+
+        machine.V[1] = 123
+
+        machine.boot()
+
+        assertEquals(123, machine.soundTimer)
+    }
+
+    @Test
+    fun shouldAddVxToI() {
+        setInstructions(0xF11E)
+
+        machine.I = 3
+        machine.V[1] = 4
+
+        machine.boot()
+
+        assertEquals(7, machine.I)
+    }
+
+    @Test
+    fun shouldReadBCDRepresentationOfVxToMemory() {
+        setInstructions(0xF133)
+
+        machine.V[1] = 51
+        machine.I = 1000
+
+        machine.boot()
+
+        assertEquals(0, machine.memory[1000])
+        assertEquals(5, machine.memory[1001])
+        assertEquals(1, machine.memory[1002])
+    }
+
+    @Test
+    fun shouldStoreRegistersInMemoryStartingAtI() {
+        setInstructions(0xF255)
+
+        machine.I = 1000
+        machine.V[0] = 2
+        machine.V[1] = 7
+        machine.V[2] = 9
+
+        machine.boot()
+
+        assertEquals(2, machine.memory[1000])
+        assertEquals(7, machine.memory[1001])
+        assertEquals(9, machine.memory[1002])
+    }
+
+    @Test
+    fun shouldReadRegistersFromMemoryStartingAtI() {
+        setInstructions(0xF265)
+
+        machine.I = 1000
+        machine.memory[1000] = 3
+        machine.memory[1001] = 4
+        machine.memory[1002] = 2
+
+        machine.boot()
+
+        assertEquals(3, machine.V[0])
+        assertEquals(4, machine.V[1])
+        assertEquals(2, machine.V[2])
+    }
+
     companion object {
         @JvmStatic
         fun skipsInstructionWhenVxEqualsKkProvider(): List<Arguments> {
@@ -255,6 +357,14 @@ class MachineTest {
                 // skip if not pressed
                 Arguments.of(0xE0A1, 0x0A, 0x0A, 514),
                 Arguments.of(0xE0A1, 0x0A, 0x0B, 516)
+            )
+        }
+
+        @JvmStatic
+        fun waitForKeyPressProvider(): List<Arguments> {
+            return listOf(
+                Arguments.of(null, 512),
+                Arguments.of(0, 514)
             )
         }
     }
