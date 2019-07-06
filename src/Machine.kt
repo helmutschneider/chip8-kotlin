@@ -12,7 +12,6 @@ class Machine(val rom: InputStream, val io: InputOutput) {
     var soundTimer = 0
     var programCounter = 0
     var stackPointer = 0
-    var previousInstruction: Instruction? = null
     var onCycle: ((Machine, Instruction) -> Unit)? = null
 
     fun boot() {
@@ -227,8 +226,6 @@ class Machine(val rom: InputStream, val io: InputOutput) {
                 throw Exception("Unknown instruction \"%s\"".format(Integer.toHexString(instr.value)))
             }
         }
-
-        this.previousInstruction = instr
 
         onCycle?.let { it(this, instr) }
     }

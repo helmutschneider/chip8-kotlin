@@ -40,7 +40,6 @@ class MachineTest {
 
         machine.boot()
 
-        assertEquals(0x00E0, machine.previousInstruction?.value)
         assertEquals(514, machine.programCounter)
     }
 
@@ -53,7 +52,6 @@ class MachineTest {
 
         machine.boot()
 
-        assertEquals(0x00EE, machine.previousInstruction?.value)
         assertEquals(1000, machine.programCounter)
     }
 
