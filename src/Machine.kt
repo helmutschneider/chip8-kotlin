@@ -21,6 +21,12 @@ private val CHARACTER_SET = intArrayOf(
     0xF0, 0x80, 0xF0, 0x80, 0x80  // F
 )
 
+// 500 hz
+private const val TICK_SIZE_EMULATION = 1e9/500
+
+// 60 hz
+private const val TICK_SIZE_TIMER = 1e9/60
+
 class Machine(val rom: InputStream, val io: InputOutput) {
     var run = true
     val memory = IntArray(4096)
@@ -46,13 +52,22 @@ class Machine(val rom: InputStream, val io: InputOutput) {
         }
 
         programCounter = 512
-        var prev = System.nanoTime()
-        val tick = 1e9/60
+
+        var prevEmulationTick = System.nanoTime()
+        var prevTimerTick = System.nanoTime()
 
         while (run) {
-            val t = System.nanoTime()
-            if (t - prev >= tick) {
-                prev = t
+            var t = System.nanoTime()
+
+            if (t - prevEmulationTick >= TICK_SIZE_EMULATION) {
+                prevEmulationTick = t
+                cycle()
+            }
+
+            t = System.nanoTime()
+
+            if (t - prevTimerTick >= TICK_SIZE_TIMER) {
+                prevTimerTick = t
 
                 if (delayTimer > 0) {
                     delayTimer -= 1
@@ -64,7 +79,7 @@ class Machine(val rom: InputStream, val io: InputOutput) {
                 io.draw(displayBuffer)
             }
 
-            cycle()
+            Thread.sleep(0, 1)
         }
     }
 
